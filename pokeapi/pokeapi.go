@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 
 	"github.com/ashufelt/pokecache"
@@ -77,7 +78,36 @@ func displayLocationAreaInformation(locationAreaInformation *LocationAreaInforma
 	}
 }
 
-func fillDataFromEndpoint(endpoint string, cache *pokecache.Cache, locationDataStruct LocationStruct) error {
+func CatchPokemonAttempt(cache *pokecache.Cache, myDex *Pokedex, pokemonName string) error {
+	var err error
+	endpoint := fmt.Sprintf("%s%s", BasePokemonSpeciesEndpoint, pokemonName)
+	var pokemonInfo Pokemon = Pokemon{}
+
+	cachedResp, exists := cache.Get(endpoint)
+	if exists { //take from cache
+		//fmt.Println("Using cached values")
+		err = json.Unmarshal(cachedResp, &pokemonInfo)
+		if err != nil {
+			return err
+		}
+	} else { //or get data from new GET HTTP request using PokeAPI
+		err = fillDataFromEndpoint(endpoint, cache, &pokemonInfo)
+		if err != nil {
+			fmt.Printf("Could not receive data for pokemon '%s'\n", pokemonName)
+			return err
+		}
+	}
+	catchRate := pokemonInfo.CaptureRate
+	if rand.Intn(256) > (255 - catchRate) {
+		fmt.Printf("%s was caught!\n", pokemonName)
+		myDex.PokemonCaught[pokemonName] = pokemonInfo
+	} else {
+		fmt.Printf("%s escaped!\n", pokemonName)
+	}
+	return nil
+}
+
+func fillDataFromEndpoint(endpoint string, cache *pokecache.Cache, locationDataStruct interface{}) error {
 	resp, err := http.Get(endpoint)
 	if err != nil {
 		return fmt.Errorf("error with GET endpoint %s", endpoint)
