@@ -78,7 +78,7 @@ func displayLocationAreaInformation(locationAreaInformation *LocationAreaInforma
 	}
 }
 
-func CatchPokemonAttempt(cache *pokecache.Cache, myDex *Pokedex, pokemonName string) error {
+func CatchPokemonAttempt(cache *pokecache.Cache, pokemonName string) error {
 	var err error
 	endpoint := fmt.Sprintf("%s%s", BasePokemonSpeciesEndpoint, pokemonName)
 	var pokemonInfo Pokemon = Pokemon{}
@@ -100,7 +100,6 @@ func CatchPokemonAttempt(cache *pokecache.Cache, myDex *Pokedex, pokemonName str
 	catchRate := pokemonInfo.CaptureRate
 	if rand.Intn(256) > (255 - catchRate) {
 		fmt.Printf("%s was caught!\n", pokemonName)
-		myDex.PokemonCaught[pokemonName] = pokemonInfo
 	} else {
 		fmt.Printf("%s escaped!\n", pokemonName)
 	}
