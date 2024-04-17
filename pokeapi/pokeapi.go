@@ -78,10 +78,10 @@ func displayLocationAreaInformation(locationAreaInformation *LocationAreaInforma
 	}
 }
 
-func CatchPokemonAttempt(cache *pokecache.Cache, pokemonName string) error {
+func CatchPokemonAttempt(cache *pokecache.Cache, myDex *Pokedex, pokemonName string) error {
 	var err error
 	endpoint := fmt.Sprintf("%s%s", BasePokemonSpeciesEndpoint, pokemonName)
-	var pokemonInfo Pokemon = Pokemon{}
+	var pokemonInfo PokemonSpecies = PokemonSpecies{}
 
 	cachedResp, exists := cache.Get(endpoint)
 	if exists { //take from cache
@@ -100,9 +100,34 @@ func CatchPokemonAttempt(cache *pokecache.Cache, pokemonName string) error {
 	catchRate := pokemonInfo.CaptureRate
 	if rand.Intn(256) > (255 - catchRate) {
 		fmt.Printf("%s was caught!\n", pokemonName)
+		return addToDex(myDex, pokemonName)
 	} else {
 		fmt.Printf("%s escaped!\n", pokemonName)
 	}
+	return nil
+}
+
+func addToDex(myDex *Pokedex, pokemonName string) error {
+	if _, ok := myDex.PokemonCaught[pokemonName]; ok {
+		return nil
+	}
+	var err error
+	endpoint := fmt.Sprintf("%s%s", BasePokemonEndpoint, pokemonName)
+
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return fmt.Errorf("error with GET endpoint %s", endpoint)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode > 299 {
+		return fmt.Errorf("response failed with status code: %d and body: %s", resp.StatusCode, body)
+	}
+	if err != nil {
+		return err
+	}
+	myDex.Add(pokemonName, []byte(body))
+	//fmt.Printf("Adding %s from endpoint %s", pokemonName, endpoint)
 	return nil
 }
 

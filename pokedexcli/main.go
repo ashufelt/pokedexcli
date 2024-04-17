@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -14,7 +15,7 @@ import (
 type cliCommand struct {
 	name        string
 	description string
-	callback    func(*pokeapi.LocationConfig, *pokecache.Cache, string) error
+	callback    func(*pokeapi.LocationConfig, *pokecache.Cache, *pokeapi.Pokedex, string) error
 }
 
 func getCommands() map[string]cliCommand {
@@ -39,13 +40,11 @@ func getCommands() map[string]cliCommand {
 			description: "Displays a help message",
 			callback:    commandHelp,
 		},
-		/*
-			"inspect": {
-				name:        "inspect",
-				description: "Displays info about a Pokemon, if you have caught it",
-				callback:    commandInspect,
-			},
-		*/
+		"inspect": {
+			name:        "inspect",
+			description: "Displays info about a Pokemon, if you have caught it",
+			callback:    commandInspect,
+		},
 		"map": {
 			name:        "map",
 			description: "Display the next 20 locations",
@@ -56,25 +55,30 @@ func getCommands() map[string]cliCommand {
 			description: "Display the previous 20 locations",
 			callback:    commandMapB,
 		},
+		"pokedex": {
+			name:        "pokedex",
+			description: "Display all pokemon you have caught",
+			callback:    commandPokedex,
+		},
 	}
 }
 
-func commandCatch(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, pokemonName string) error {
+func commandCatch(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, myDex *pokeapi.Pokedex, pokemonName string) error {
 	fmt.Printf("Throwing a Pokeball at %s\n", pokemonName)
-	return pokeapi.CatchPokemonAttempt(cache, pokemonName)
+	return pokeapi.CatchPokemonAttempt(cache, myDex, pokemonName)
 }
 
-func commandExit(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ string) error {
+func commandExit(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ *pokeapi.Pokedex, _ string) error {
 	os.Exit(0)
 	return nil
 }
 
-func commandExplore(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, areaName string) error {
+func commandExplore(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ *pokeapi.Pokedex, areaName string) error {
 	fmt.Printf("--- Exploring %s ---\n", areaName)
 	return pokeapi.GetSpecificLocationInfo(cache, areaName)
 }
 
-func commandHelp(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ string) error {
+func commandHelp(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ *pokeapi.Pokedex, _ string) error {
 	commands := getCommands()
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("---------Usage---------")
@@ -86,18 +90,49 @@ func commandHelp(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ string) 
 	return nil
 }
 
-func commandMap(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ string) error {
+func commandInspect(_ *pokeapi.LocationConfig, _ *pokecache.Cache, myDex *pokeapi.Pokedex, pokemonName string) error {
+	var pokemon pokeapi.Pokemon = pokeapi.Pokemon{}
+
+	dexInfo, exists := myDex.Get(pokemonName)
+	if !exists {
+		fmt.Println("You have not caught this pokemon")
+		return nil
+	}
+	json.Unmarshal(dexInfo, &pokemon)
+	fmt.Printf("Name: %s\n", pokemon.Name)
+	fmt.Printf("Height: %v\n", pokemon.Height)
+	fmt.Printf("Weight: %v\n", pokemon.Weight)
+	fmt.Println("Stats:")
+	for _, s := range pokemon.Stats {
+		fmt.Printf("  -%s: %v\n", s.Stat.Name, s.BaseStat)
+	}
+	fmt.Println("Type(s):")
+	for _, t := range pokemon.Types {
+		fmt.Printf(" - %s\n", t.Type.Name)
+	}
+	return nil
+}
+
+func commandMap(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ *pokeapi.Pokedex, _ string) error {
 	fmt.Println("------Retrieving up to 20 location areas------")
 	return pokeapi.GetLocationsDump(cfg, cache)
 }
 
-func commandMapB(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ string) error {
+func commandMapB(cfg *pokeapi.LocationConfig, cache *pokecache.Cache, _ *pokeapi.Pokedex, _ string) error {
 	if cfg.PreviousLocationPage == nil {
 		fmt.Println("Already on the first page")
 		return nil
 	}
 	cfg.NextLocationPage = copystring(*cfg.PreviousLocationPage)
-	return commandMap(cfg, cache, "")
+	return commandMap(cfg, cache, nil, "")
+}
+
+func commandPokedex(_ *pokeapi.LocationConfig, _ *pokecache.Cache, myDex *pokeapi.Pokedex, _ string) error {
+	fmt.Println("Your Pokedex:")
+	for key := range myDex.PokemonCaught {
+		fmt.Printf(" - %s\n", key)
+	}
+	return nil
 }
 
 func copystring(a string) *string {
@@ -114,6 +149,7 @@ func main() {
 		PreviousLocationPage: nil,
 	}
 	pokeCache := pokecache.NewCache(30 * time.Second)
+	myPokedex := pokeapi.NewPokedex()
 	inputScanner := bufio.NewScanner(os.Stdin)
 	commands := getCommands()
 	for {
@@ -126,9 +162,9 @@ func main() {
 		}
 		if c, ok := commands[splitInput[0]]; ok {
 			if len(splitInput) == 1 {
-				c.callback(&configuration, &pokeCache, "")
+				c.callback(&configuration, &pokeCache, &myPokedex, "")
 			} else if len(splitInput) == 2 {
-				c.callback(&configuration, &pokeCache, splitInput[1])
+				c.callback(&configuration, &pokeCache, &myPokedex, splitInput[1])
 			}
 
 		}
